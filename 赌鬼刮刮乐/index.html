@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赌鬼刮刮乐 - 幸运刮不停</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#f97316',
+                        secondary: '#ec4899',
+                        accent: '#3b82f6',
+                        dark: '#1e293b',
+                        light: '#f8fafc'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'bounce-slow': 'bounce 2s infinite',
+                        'spin-slow': 'spin 3s linear infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                        'win-glow': 'winGlow 2s ease-in-out infinite',
+                        'shuffle': 'shuffle 1s ease-in-out'
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-10px)' }
+                        },
+                        winGlow: {
+                            '0%, 100%': { boxShadow: '0 0 20px 5px rgba(251, 191, 36, 0.5)' },
+                            '50%': { boxShadow: '0 0 30px 10px rgba(251, 191, 36, 0.8)' }
+                        },
+                        shuffle: {
+                            '0%': { transform: 'rotate(0deg) scale(1)' },
+                            '50%': { transform: 'rotate(180deg) scale(1.1)' },
+                            '100%': { transform: 'rotate(360deg) scale(1)' }
+                        }
+                    }
+                },
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .scratch-card {
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .scratch-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .scratch-card.active {
+            animation: win-glow 2s ease-in-out infinite;
+        }
+        
+        .scratch-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #c4b5fd 0%, #ddd6fe 50%, #c4b5fd 100%);
+            cursor: grab;
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+        
+        .scratch-overlay.hidden {
+            display: none;
+        }
+        
+        .scratch-overlay:active {
+            cursor: grabbing;
+        }
+        
+        .scratch-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+        
+        .prize {
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .prize.win {
+            color: #f59e0b;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .prize.lose {
+            color: #6b7280;
+        }
+        
+        .confetti {
+            position: fixed;
+            top: -10px;
+            z-index: 1000;
+            animation: fall linear forwards;
+        }
+        
+        @keyframes fall {
+            to {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            animation: slide-in 0.3s ease-out;
+        }
+        
+        @keyframes slide-in {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .title-glow {
+            text-shadow: 0 0 20px rgba(255,255,255,0.5);
+        }
+        
+        .btn-gradient {
+            background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-gradient:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(249, 115, 22, 0.4);
+        }
+        
+        .btn-start {
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+        }
+        
+        .file-upload {
+            border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .file-upload:hover {
+            border-color: rgba(255,255,255,0.6);
+            background: rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-[clamp(2.5rem,8vw,4rem)] font-bold text-white mb-4 title-glow animate-float">
+                <i class="fa fa-star text-yellow-400 mr-3"></i>
+                赌鬼刮刮乐
+                <i class="fa fa-star text-yellow-400 ml-3"></i>
+            </h1>
+            <p class="text-white text-lg max-w-2xl mx-auto mb-8">
+                刮开卡片，试试你的运气！大奖等你拿！
+            </p>
+            <div class="flex flex-wrap justify-center gap-4 mb-8">
+                <button id="start-btn" class="btn-start text-white font-bold py-3 px-8 rounded-lg shadow-lg">
+                    <i class="fa fa-play mr-2"></i> 开始游戏
+                </button>
+                <button id="reset-btn" class="btn-gradient text-white font-bold py-3 px-8 rounded-lg shadow-lg">
+                    <i class="fa fa-refresh mr-2"></i> 重置游戏
+                </button>
+            </div>
+            
+            <!-- File Upload -->
+            <div class="file-upload max-w-md mx-auto">
+                <input type="file" id="file-input" accept=".xlsx, .xls" class="hidden">
+                <label for="file-input" class="cursor-pointer block">
+                    <i class="fa fa-file-excel-o text-green-400 text-4xl mb-3"></i>
+                    <p class="text-white text-lg">点击或拖拽导入奖池Excel文件</p>
+                    <p class="text-white text-opacity-70 text-sm mt-1">支持 .xlsx, .xls 格式</p>
+                </label>
+                <p id="file-status" class="text-white text-opacity-70 text-sm mt-3">未选择文件</p>
+            </div>
+        </header>
+
+        <!-- Scratch Cards Grid -->
+        <div id="scratch-cards-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-12">
+            <!-- Scratch cards will be generated here -->
+        </div>
+
+        <!-- Footer -->
+        <footer class="text-center text-white text-opacity-70 text-sm">
+            <p>© 2026 赌鬼刮刮乐 - 娱乐仅供参考，请勿沉迷</p>
+        </footer>
+    </div>
+
+    <script>
+        // Game configuration
+        let prizes = [
+            { name: '一等奖', probability: 5, color: 'bg-yellow-500' },
+            { name: '二等奖', probability: 10, color: 'bg-blue-500' },
+            { name: '三等奖', probability: 15, color: 'bg-green-500' },
+            { name: '谢谢参与', probability: 70, color: 'bg-gray-500' }
+        ];
+
+        let cards = [];
+        let totalCards = 0;
+        let scratchCount = 0;
+        let winCount = 0;
+        let gameStarted = false;
+        let importedPrizes = [];
+        let cardData = [];
+
+        // DOM elements
+        const container = document.getElementById('scratch-cards-container');
+        const startBtn = document.getElementById('start-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const fileInput = document.getElementById('file-input');
+        const fileStatus = document.getElementById('file-status');
+
+        // Initialize game
+        function initGame() {
+            if (cardData.length > 0) {
+                // Use imported card data
+                createCardsFromData();
+            } else {
+                // Default 8 cards
+                createDefaultCards(8);
+            }
+        }
+
+        // Create default cards
+        function createDefaultCards(count = 8) {
+            container.innerHTML = '';
+            totalCards = 0;
+            
+            for (let i = 0; i < count; i++) {
+                const card = createScratchCard();
+                container.appendChild(card);
+                totalCards++;
+            }
+        }
+
+        // Create cards from imported data
+        function createCardsFromData() {
+            container.innerHTML = '';
+            totalCards = 0;
+            
+            cardData.forEach((prizeName, index) => {
+                const card = createScratchCard({ name: prizeName });
+                container.appendChild(card);
+                totalCards++;
+            });
+        }
+
+        // Create scratch card
+        function createScratchCard(customPrize = null) {
+            const card = document.createElement('div');
+            card.className = 'scratch-card bg-white rounded-xl p-6 h-48 flex items-center justify-center';
+            
+            const content = document.createElement('div');
+            content.className = 'scratch-content w-full h-full flex items-center justify-center';
+            
+            const prize = document.createElement('div');
+            prize.className = 'prize';
+            
+            const overlay = document.createElement('div');
+            overlay.className = 'scratch-overlay hidden';
+            
+            // Determine prize
+            let selectedPrize;
+            if (customPrize) {
+                selectedPrize = customPrize;
+            } else if (importedPrizes.length > 0) {
+                // Use imported prizes
+                const randomIndex = Math.floor(Math.random() * importedPrizes.length);
+                selectedPrize = importedPrizes[randomIndex];
+            } else {
+                // Use default prizes
+                const random = Math.random() * 100;
+                let cumulativeProbability = 0;
+                selectedPrize = prizes[prizes.length - 1];
+                
+                for (const p of prizes) {
+                    cumulativeProbability += p.probability;
+                    if (random <= cumulativeProbability) {
+                        selectedPrize = p;
+                        break;
+                    }
+                }
+            }
+            
+            prize.textContent = selectedPrize.name;
+            if (selectedPrize.name !== '谢谢参与') {
+                prize.classList.add('win');
+            } else {
+                prize.classList.add('lose');
+            }
+            
+            content.appendChild(prize);
+            card.appendChild(content);
+            card.appendChild(overlay);
+            
+            return card;
+        }
+
+        // Start game
+        function startGame() {
+            if (totalCards === 0) {
+                showToast('请先生成卡片！', 'error');
+                return;
+            }
+            
+            gameStarted = true;
+            startBtn.innerHTML = '<i class="fa fa-refresh mr-2"></i> 重新开始';
+            
+            // Shuffle cards
+            shuffleCards();
+            
+            // Add overlays
+            const overlays = document.querySelectorAll('.scratch-overlay');
+            overlays.forEach((overlay, index) => {
+                setTimeout(() => {
+                    overlay.classList.remove('hidden');
+                    // Add scratch functionality
+                    const card = overlay.parentElement;
+                    const prize = card.querySelector('.prize');
+                    const prizeName = prize.textContent;
+                    const selectedPrize = prizes.find(p => p.name === prizeName) || 
+                                      { name: prizeName };
+                    addScratchFunctionality(overlay, card, selectedPrize);
+                }, index * 100);
+            });
+            
+            showToast('游戏开始！请刮开卡片', 'success');
+        }
+
+        // Shuffle cards
+        function shuffleCards() {
+            const cardElements = Array.from(container.children);
+            cardElements.forEach(card => {
+                card.style.animation = 'shuffle 1s ease-in-out';
+            });
+            
+            setTimeout(() => {
+                // Shuffle array
+                for (let i = cardElements.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [cardElements[i], cardElements[j]] = [cardElements[j], cardElements[i]];
+                }
+                
+                // Clear container and append shuffled cards
+                container.innerHTML = '';
+                cardElements.forEach(card => {
+                    card.style.animation = '';
+                    container.appendChild(card);
+                });
+            }, 500);
+        }
+
+        // Add scratch functionality
+        function addScratchFunctionality(overlay, card, prize) {
+            let isScratching = false;
+            let lastX = 0;
+            let lastY = 0;
+            
+            // Convert overlay to canvas immediately for proper scratch functionality
+            const canvas = document.createElement('canvas');
+            canvas.width = overlay.offsetWidth;
+            canvas.height = overlay.offsetHeight;
+            canvas.className = 'scratch-overlay';
+            
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#c4b5fd';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            overlay.replaceWith(canvas);
+            overlay = canvas;
+            
+            overlay.addEventListener('mousedown', startScratching);
+            overlay.addEventListener('touchstart', startScratching, { passive: true });
+            
+            document.addEventListener('mousemove', scratch);
+            document.addEventListener('touchmove', scratch, { passive: true });
+            
+            document.addEventListener('mouseup', stopScratching);
+            document.addEventListener('touchend', stopScratching);
+            
+            function startScratching(e) {
+                isScratching = true;
+                const rect = overlay.getBoundingClientRect();
+                
+                if (e.type === 'mousedown') {
+                    lastX = e.clientX - rect.left;
+                    lastY = e.clientY - rect.top;
+                } else {
+                    lastX = e.touches[0].clientX - rect.left;
+                    lastY = e.touches[0].clientY - rect.top;
+                }
+            }
+            
+            function scratch(e) {
+                if (!isScratching) return;
+                
+                const rect = overlay.getBoundingClientRect();
+                let currentX, currentY;
+                
+                if (e.type === 'mousemove') {
+                    currentX = e.clientX - rect.left;
+                    currentY = e.clientY - rect.top;
+                } else {
+                    currentX = e.touches[0].clientX - rect.left;
+                    currentY = e.touches[0].clientY - rect.top;
+                }
+                
+                const ctx = overlay.getContext('2d');
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.lineWidth = 30;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+                
+                lastX = currentX;
+                lastY = currentY;
+                
+                // Check if card is fully scratched
+                checkScratchCompletion(overlay, card, prize);
+            }
+            
+            function stopScratching() {
+                isScratching = false;
+            }
+        }
+
+        // Check if card is fully scratched
+        function checkScratchCompletion(overlay, card, prize) {
+            const canvas = overlay;
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imageData.data;
+            let transparentPixels = 0;
+            
+            for (let i = 3; i < pixels.length; i += 4) {
+                if (pixels[i] === 0) {
+                    transparentPixels++;
+                }
+            }
+            
+            const totalPixels = canvas.width * canvas.height;
+            const scratchPercentage = (transparentPixels / totalPixels) * 100;
+            
+            if (scratchPercentage > 50) {
+                // Card is considered fully scratched
+                canvas.style.opacity = '0';
+                canvas.style.pointerEvents = 'none';
+                
+                if (prize.name !== '谢谢参与') {
+                    card.classList.add('active');
+                    showConfetti();
+                    showToast(`恭喜你中了 ${prize.name}！`, 'success');
+                    winCount++;
+                } else {
+                    showToast('谢谢参与，再接再厉！', 'info');
+                }
+                
+                scratchCount++;
+            }
+        }
+
+        // Show confetti
+        function showConfetti() {
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.width = (Math.random() * 10 + 5) + 'px';
+                confetti.style.height = (Math.random() * 10 + 5) + 'px';
+                confetti.style.backgroundColor = ['#f59e0b', '#3b82f6', '#ec4899', '#10b981', '#8b5cf6'][Math.floor(Math.random() * 5)];
+                confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+                
+                document.body.appendChild(confetti);
+                
+                setTimeout(() => {
+                    confetti.remove();
+                }, 5000);
+            }
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`;
+            toast.innerHTML = `<i class="fa fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-2"></i>${message}`;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slide-in 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Reset game
+        function resetGame() {
+            container.innerHTML = '';
+            totalCards = 0;
+            scratchCount = 0;
+            winCount = 0;
+            gameStarted = false;
+            startBtn.innerHTML = '<i class="fa fa-play mr-2"></i> 开始游戏';
+            initGame();
+            showToast('游戏已重置！', 'info');
+        }
+
+        // Handle file upload
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            fileStatus.textContent = '正在解析文件...';
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                    // Process data to create card data based on 奖项 and 数量 columns
+                    cardData = [];
+                    jsonData.forEach(item => {
+                        const prizeName = item['奖项'] || item['奖品'] || item['prize'] || item['name'];
+                        const quantity = parseInt(item['数量'] || item['count'] || item['num'] || 1);
+                        
+                        if (prizeName && !isNaN(quantity) && quantity > 0) {
+                            for (let i = 0; i < quantity; i++) {
+                                cardData.push(prizeName);
+                            }
+                        }
+                    });
+
+                    if (cardData.length > 0) {
+                        fileStatus.textContent = `成功导入 ${cardData.length} 张卡片`;
+                        showToast(`成功导入 ${cardData.length} 张卡片！`, 'success');
+                        // Reset game to use new card data
+                        resetGame();
+                    } else {
+                        fileStatus.textContent = '文件格式不正确，未找到奖项和数量数据';
+                        showToast('文件格式不正确，未找到奖项和数量数据', 'error');
+                    }
+                } catch (error) {
+                    fileStatus.textContent = '文件解析失败';
+                    showToast('文件解析失败，请检查文件格式', 'error');
+                    console.error('Error parsing Excel:', error);
+                }
+            };
+
+            reader.onerror = function() {
+                fileStatus.textContent = '文件读取失败';
+                showToast('文件读取失败', 'error');
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', startGame);
+        resetBtn.addEventListener('click', resetGame);
+        fileInput.addEventListener('change', handleFileUpload);
+
+        // Initialize game
+        initGame();
+    </script>
+</body>
+</html>
