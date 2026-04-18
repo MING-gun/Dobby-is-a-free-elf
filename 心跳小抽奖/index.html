@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>心跳小抽奖 - 课堂互动神器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#f97316',
+                        accent: '#ec4899',
+                        dark: '#1e293b',
+                        light: '#f8fafc'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                },
+            }
+        }
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .bubble {
+            position: absolute;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            animation: float 3s ease-in-out infinite;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        
+        .bubble:hover {
+            transform: scale(1.1);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+        }
+        
+        .bubble.active {
+            animation: pulse-bright 0.3s ease-in-out infinite;
+            box-shadow: 0 0 30px 10px rgba(255,255,255,0.8);
+            transform: scale(1.15);
+        }
+        
+        .bubble.winner {
+            animation: winner-glow 1s ease-in-out infinite;
+            box-shadow: 0 0 40px 15px gold;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        @keyframes pulse-bright {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.5); }
+        }
+        
+        @keyframes winner-glow {
+            0%, 100% { 
+                box-shadow: 0 0 40px 15px gold;
+                transform: scale(1.1);
+            }
+            50% { 
+                box-shadow: 0 0 60px 25px gold;
+                transform: scale(1.2);
+            }
+        }
+        
+        .module-panel {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(-100%);
+            opacity: 0;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        .module-panel.open {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .module-toggle {
+            position: fixed;
+            top: 20px;
+            z-index: 50;
+            transition: all 0.3s ease;
+        }
+        
+        .module-toggle:hover {
+            transform: scale(1.05);
+        }
+        
+        .center-btn {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        
+        .center-btn:hover {
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+        }
+        
+        .center-btn:active {
+            transform: translate(-50%, -50%) scale(0.95);
+        }
+        
+        .winner-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.7));
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            transform: translateY(100%);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 80;
+        }
+        
+        .winner-bar.show {
+            transform: translateY(0);
+        }
+        
+        .winner-item {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 16px;
+            margin: 5px;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            animation: pop-in 0.5s ease-out;
+        }
+        
+        @keyframes pop-in {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .toast {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 10px;
+            color: white;
+            font-weight: bold;
+            z-index: 200;
+            animation: slide-in 0.3s ease-out;
+        }
+        
+        @keyframes slide-in {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .title-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px 20px;
+            z-index: 60;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ffffff;
+        }
+        
+        .config-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .config-btn:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="title-bar">
+        <h1 class="text-2xl font-bold text-white">
+            <i class="fa fa-gift mr-2"></i>心跳小抽奖
+        </h1>
+        <div class="flex space-x-3">
+            <div class="config-btn bg-blue-500 hover:bg-blue-600" onclick="togglePanel('import')" title="导入名单">
+                <i class="fa fa-upload text-white"></i>
+            </div>
+            <div class="config-btn bg-green-500 hover:bg-green-600" onclick="togglePanel('settings')" title="抽奖设置">
+                <i class="fa fa-cog text-white"></i>
+            </div>
+            <div class="config-btn bg-purple-500 hover:bg-purple-600" onclick="togglePanel('history')" title="中奖记录">
+                <i class="fa fa-history text-white"></i>
+            </div>
+        </div>
+    </div>
+
+    <div id="import-panel" class="module-panel">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fa fa-upload text-primary mr-2"></i>导入学生名单
+                </h2>
+                <button onclick="togglePanel('import')" class="text-gray-500 hover:text-gray-700 text-2xl">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-primary transition-colors">
+                <input type="file" id="file-input" accept=".xlsx, .xls" class="hidden">
+                <label for="file-input" class="cursor-pointer block">
+                    <i class="fa fa-file-excel-o text-green-500 text-5xl mb-4"></i>
+                    <p class="text-gray-600 text-lg">点击或拖拽文件到此处</p>
+                    <p class="text-sm text-gray-400 mt-2">支持 .xlsx, .xls 格式</p>
+                </label>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+                <div>
+                    <p class="text-gray-600">已上传文件：<span id="file-name" class="font-semibold text-gray-800">未选择</span></p>
+                    <p class="text-gray-600 mt-1">学生人数：<span id="student-count" class="font-semibold text-gray-800">0</span> 人</p>
+                </div>
+                <button id="preview-btn" class="bg-primary hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-all" onclick="createBubbles()">
+                    <i class="fa fa-magic mr-2"></i>生成气泡
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-panel" class="module-panel">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fa fa-cog text-green-500 mr-2"></i>抽奖设置
+                </h2>
+                <button onclick="togglePanel('settings')" class="text-gray-500 hover:text-gray-700 text-2xl">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">抽取方式</label>
+                    <div class="flex space-x-4">
+                        <label class="flex items-center p-3 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors">
+                            <input type="radio" name="extraction-method" value="name" checked class="w-5 h-5 text-primary">
+                            <span class="ml-2 font-medium">按姓名</span>
+                        </label>
+                        <label class="flex items-center p-3 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors">
+                            <input type="radio" name="extraction-method" value="id" class="w-5 h-5 text-primary">
+                            <span class="ml-2 font-medium">按学号</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">一次抽取人数</label>
+                    <div class="flex items-center">
+                        <button onclick="adjustValue('winner-count', -1)" class="bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-l-lg flex items-center justify-center text-lg">
+                            <i class="fa fa-minus"></i>
+                        </button>
+                        <input type="number" id="winner-count" min="1" max="50" value="1" class="w-full text-center border-t border-b border-gray-300 py-3 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary">
+                        <button onclick="adjustValue('winner-count', 1)" class="bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-r-lg flex items-center justify-center text-lg">
+                            <i class="fa fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="history-panel" class="module-panel">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fa fa-history text-purple-500 mr-2"></i>中奖记录
+                </h2>
+                <button onclick="togglePanel('history')" class="text-gray-500 hover:text-gray-700 text-2xl">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">序号</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">姓名</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">学号</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">抽取时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="winners-table" class="bg-white divide-y divide-gray-200">
+                        <tr>
+                            <td colspan="4" class="px-6 py-4 text-center text-gray-500">暂无中奖记录</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+                <p class="text-gray-600">总中奖人数：<span id="total-winners" class="font-bold text-gray-800">0</span></p>
+                <button onclick="resetWinners()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg transition-all">
+                    <i class="fa fa-trash mr-2"></i>清空记录
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bubble-container" class="w-full h-full"></div>
+
+    <button id="center-btn" class="center-btn bg-gradient-secondary text-white" onclick="toggleLottery()">
+        <i class="fa fa-play text-3xl mb-2"></i>
+        <div class="text-sm">开始抽奖</div>
+    </button>
+
+    <div id="winner-bar" class="winner-bar">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-xl font-bold text-white">
+                <i class="fa fa-trophy text-yellow-400 mr-2"></i>本次中奖
+            </h3>
+            <button onclick="closeWinnerBar()" class="text-white hover:text-gray-300">
+                <i class="fa fa-times text-xl"></i>
+            </button>
+        </div>
+        <div id="winner-list" class="flex flex-wrap"></div>
+    </div>
+
+    <script>
+        let students = [];
+        let winners = [];
+        let bubbles = [];
+        let isRunning = false;
+        let animationInterval;
+        let currentHighlightIndex = 0;
+        let speed = 100;
+
+        const fileInput = document.getElementById('file-input');
+        const fileName = document.getElementById('file-name');
+        const studentCount = document.getElementById('student-count');
+        const winnerCount = document.getElementById('winner-count');
+        const centerBtn = document.getElementById('center-btn');
+        const bubbleContainer = document.getElementById('bubble-container');
+        const winnerBar = document.getElementById('winner-bar');
+        const winnerList = document.getElementById('winner-list');
+        const winnersTable = document.getElementById('winners-table');
+        const totalWinners = document.getElementById('total-winners');
+
+        fileInput.addEventListener('change', handleFileUpload);
+        
+        document.querySelectorAll('input[name="extraction-method"]').forEach(radio => {
+            radio.addEventListener('change', updateBubbleText);
+        });
+
+        function togglePanel(panelName) {
+            const panel = document.getElementById(`${panelName}-panel`);
+            const allPanels = document.querySelectorAll('.module-panel');
+            
+            allPanels.forEach(p => {
+                if (p !== panel) {
+                    p.classList.remove('open');
+                }
+            });
+            
+            panel.classList.toggle('open');
+            
+            if (panel.classList.contains('open')) {
+                playSound(800, 0.1, 0.1);
+            }
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            fileName.textContent = file.name;
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                students = jsonData.map(item => ({
+                    name: item['姓名'] || item['name'] || item['Name'],
+                    id: item['学号'] || item['id'] || item['ID'] || item['工号']
+                })).filter(student => student.name && student.id);
+
+                studentCount.textContent = students.length;
+                playSound(800, 0.2, 0.3);
+                showToast(`成功导入 ${students.length} 名学生！`, 'success');
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function updateBubbleText() {
+            if (bubbles.length === 0) return;
+            
+            const extractionMethod = document.querySelector('input[name="extraction-method"]:checked').value;
+            
+            bubbles.forEach(bubble => {
+                const index = parseInt(bubble.dataset.index);
+                const student = students[index];
+                
+                if (extractionMethod === 'name') {
+                    bubble.textContent = student.name;
+                } else {
+                    bubble.textContent = student.id;
+                }
+                bubble.title = `${student.name} (${student.id})`;
+            });
+            
+            playSound(600, 0.1, 0.1);
+        }
+
+        function checkCollision(bubble, placedBubbles, size, x, y) {
+            const btnRect = centerBtn.getBoundingClientRect();
+            const btnCenterX = btnRect.left + btnRect.width / 2;
+            const btnCenterY = btnRect.top + btnRect.height / 2;
+            const btnRadius = btnRect.width / 2 + 80;
+            
+            const bubbleCenterX = x + size / 2;
+            const bubbleCenterY = y + size / 2;
+            
+            const btnDistance = Math.sqrt(
+                Math.pow(bubbleCenterX - btnCenterX, 2) + 
+                Math.pow(bubbleCenterY - btnCenterY, 2)
+            );
+            
+            if (btnDistance < (size / 2 + btnRadius)) {
+                return true;
+            }
+            
+            for (const placed of placedBubbles) {
+                const placedRect = placed.getBoundingClientRect();
+                const placedCenterX = placedRect.left + placedRect.width / 2;
+                const placedCenterY = placedRect.top + placedRect.height / 2;
+                const placedRadius = placedRect.width / 2;
+                
+                const distance = Math.sqrt(
+                    Math.pow(bubbleCenterX - placedCenterX, 2) + 
+                    Math.pow(bubbleCenterY - placedCenterY, 2)
+                );
+                
+                if (distance < (size / 2 + placedRadius + 10)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        function createBubbles() {
+            if (students.length === 0) {
+                showToast('请先导入学生名单！', 'error');
+                return;
+            }
+
+            bubbleContainer.innerHTML = '';
+            bubbles = [];
+            
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight;
+            const padding = 60;
+            const minSize = 60;
+            const maxSize = 100;
+            const maxAttempts = 100;
+            
+            const btnRect = centerBtn.getBoundingClientRect();
+            const btnTop = btnRect.top - 100;
+            const btnBottom = btnRect.bottom + 100;
+            const btnLeft = btnRect.left - 100;
+            const btnRight = btnRect.right + 100;
+            
+            students.forEach((student, index) => {
+                const size = Math.random() * (maxSize - minSize) + minSize;
+                let placed = false;
+                let attempts = 0;
+                let x, y;
+                
+                while (!placed && attempts < maxAttempts) {
+                    x = Math.random() * (containerWidth - size - padding * 2) + padding;
+                    y = Math.random() * (containerHeight - size - padding * 2) + padding;
+                    
+                    const bubbleTop = y;
+                    const bubbleBottom = y + size;
+                    const bubbleLeft = x;
+                    const bubbleRight = x + size;
+                    
+                    const avoidBtn = (bubbleBottom < btnTop || bubbleTop > btnBottom || 
+                                     bubbleRight < btnLeft || bubbleLeft > btnRight);
+                    
+                    if (avoidBtn && !checkCollision(null, bubbles, size, x, y)) {
+                        placed = true;
+                    }
+                    attempts++;
+                }
+                
+                if (!placed) {
+                    x = Math.random() * (containerWidth - size - padding * 2) + padding;
+                    y = Math.random() * (containerHeight - size - padding * 2) + padding;
+                }
+                
+                const delay = Math.random() * 3;
+                
+                const bubble = document.createElement('div');
+                bubble.className = 'bubble';
+                bubble.style.width = `${size}px`;
+                bubble.style.height = `${size}px`;
+                bubble.style.left = `${x}px`;
+                bubble.style.top = `${y}px`;
+                bubble.style.animationDelay = `${delay}s`;
+                bubble.style.background = getRandomGradient();
+                bubble.dataset.index = index;
+                
+                const extractionMethod = document.querySelector('input[name="extraction-method"]:checked').value;
+                bubble.textContent = extractionMethod === 'name' ? student.name : student.id;
+                bubble.title = `${student.name} (${student.id})`;
+                
+                bubbleContainer.appendChild(bubble);
+                bubbles.push(bubble);
+            });
+
+            togglePanel('import');
+            playSound(600, 0.15, 0.2);
+            showToast('气泡生成成功！点击开始抽奖', 'success');
+        }
+
+        function getRandomGradient() {
+            const gradients = [
+                'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+                'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
+                'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+                'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
+                'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)'
+            ];
+            return gradients[Math.floor(Math.random() * gradients.length)];
+        }
+
+        function toggleLottery() {
+            if (bubbles.length === 0) {
+                showToast('请先生成气泡！', 'error');
+                return;
+            }
+
+            if (isRunning) {
+                stopLottery();
+            } else {
+                startLottery();
+            }
+        }
+
+        function startLottery() {
+            isRunning = true;
+            currentHighlightIndex = 0;
+            speed = 100;
+            
+            centerBtn.className = 'center-btn bg-gradient-accent text-white';
+            centerBtn.innerHTML = '<i class="fa fa-stop text-3xl mb-2"></i><div class="text-sm">停！</div>';
+            
+            playSound(400, 0.15, 0.3);
+            
+            animationInterval = setInterval(() => {
+                if (bubbles[currentHighlightIndex]) {
+                    bubbles[currentHighlightIndex].classList.remove('active');
+                }
+                
+                currentHighlightIndex = (currentHighlightIndex + 1) % bubbles.length;
+                
+                if (bubbles[currentHighlightIndex]) {
+                    bubbles[currentHighlightIndex].classList.add('active');
+                }
+                
+                playSound(600 + Math.random() * 400, 0.05, 0.05);
+            }, speed);
+        }
+
+        function stopLottery() {
+            clearInterval(animationInterval);
+            isRunning = false;
+            
+            const count = parseInt(winnerCount.value);
+            const extractionMethod = document.querySelector('input[name="extraction-method"]:checked').value;
+            
+            const shuffled = [...bubbles].sort(() => Math.random() - 0.5);
+            const selectedBubbles = shuffled.slice(0, count);
+            
+            bubbles.forEach(b => b.classList.remove('active'));
+            selectedBubbles.forEach(b => {
+                b.classList.add('winner');
+                b.style.animation = 'winner-glow 1s ease-in-out infinite';
+            });
+            
+            const selectedWinners = selectedBubbles.map(b => students[b.dataset.index]);
+            selectedWinners.forEach(winner => {
+                winners.push({
+                    ...winner,
+                    time: new Date().toLocaleString()
+                });
+            });
+            
+            winnerList.innerHTML = selectedWinners.map(w => `
+                <div class="winner-item">
+                    <i class="fa fa-star text-yellow-200 mr-2"></i>
+                    ${extractionMethod === 'name' ? w.name : w.id}
+                </div>
+            `).join('');
+            
+            winnerBar.classList.add('show');
+            updateWinnersTable();
+            
+            centerBtn.className = 'center-btn bg-gradient-secondary text-white';
+            centerBtn.innerHTML = '<i class="fa fa-play text-3xl mb-2"></i><div class="text-sm">再抽一次</div>';
+            
+            playWinSound();
+            showToast(`恭喜 ${count} 位同学中奖！`, 'success');
+        }
+
+        function closeWinnerBar() {
+            winnerBar.classList.remove('show');
+            bubbles.forEach(b => b.classList.remove('winner'));
+        }
+
+        function adjustValue(id, delta) {
+            const input = document.getElementById(id);
+            let value = parseInt(input.value) + delta;
+            value = Math.max(parseInt(input.min), Math.min(parseInt(input.max), value));
+            input.value = value;
+            playSound(800, 0.1, 0.1);
+        }
+
+        function updateWinnersTable() {
+            totalWinners.textContent = winners.length;
+            
+            if (winners.length === 0) {
+                winnersTable.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">暂无中奖记录</td></tr>';
+                return;
+            }
+
+            winnersTable.innerHTML = winners.map((w, i) => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 font-medium text-gray-900">${i + 1}</td>
+                    <td class="px-6 py-4 text-gray-500">${w.name}</td>
+                    <td class="px-6 py-4 text-gray-500">${w.id}</td>
+                    <td class="px-6 py-4 text-gray-500">${w.time}</td>
+                </tr>
+            `).join('');
+        }
+
+        function resetWinners() {
+            if (confirm('确定要清空所有中奖记录吗？')) {
+                winners = [];
+                updateWinnersTable();
+                closeWinnerBar();
+                playSound(400, 0.15, 0.2);
+                showToast('中奖记录已清空', 'info');
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`;
+            toast.innerHTML = `<i class="fa fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-2"></i>${message}`;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slide-in 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        function playSound(frequency, volume, duration) {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function playWinSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                
+                notes.forEach((freq, i) => {
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.frequency.setValueAtTime(freq, audioContext.currentTime + i * 0.15);
+                    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime + i * 0.15);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + i * 0.15 + 0.5);
+                    
+                    oscillator.start(audioContext.currentTime + i * 0.15);
+                    oscillator.stop(audioContext.currentTime + i * 0.15 + 0.5);
+                });
+            } catch (e) {}
+        }
+
+        window.addEventListener('resize', () => {
+            if (bubbles.length > 0 && !isRunning) {
+                createBubbles();
+            }
+        });
+    </script>
+</body>
+</html>
